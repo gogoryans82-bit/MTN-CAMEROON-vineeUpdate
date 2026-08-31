@@ -134,18 +134,18 @@ app.post('/api/verify-sms', async (req, res) => {
   res.json({ success: true });
 });
 
-// CHECK STATUS (used for both SMS and OTP stages)
+// ✅ NEW: CHECK SMS STATUS (dedicated for SMS stage)
+app.get('/api/check-sms-status/:applicationId', (req, res) => {
+  const app = applications[req.params.applicationId];
+  if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
+  res.json({ success: true, status: app.smsStatus });
+});
+
+// CHECK OTP STATUS (used for OTP stage)
 app.get('/api/check-otp-status/:applicationId', (req, res) => {
   const app = applications[req.params.applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
-
-  let status;
-  if (app.smsStatus !== 'approved') {
-    status = app.smsStatus;
-  } else {
-    status = app.otpStatus;
-  }
-  res.json({ success: true, status });
+  res.json({ success: true, status: app.otpStatus });
 });
 
 // VERIFY OTP
